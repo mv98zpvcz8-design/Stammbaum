@@ -1,0 +1,4 @@
+server/data/*.json
+server/data/*.bak
+server/uploads/*
+!server/uploads/.gitkeep

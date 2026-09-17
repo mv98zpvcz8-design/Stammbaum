@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Family Tree</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🌳 Family Tree</h1>
+    <div class="topbar-actions">
+      <input id="searchBox" type="search" placeholder="Search people…" />
+      <button id="addPersonBtn" class="btn btn-primary">+ Add person</button>
+    </div>
+  </header>
+
+  <main id="treeContainer" class="tree-container">
+    <div id="treeCanvas" class="tree-canvas">
+      <svg id="linesSvg" class="lines-svg"></svg>
+    </div>
+    <p id="emptyState" class="empty-state" hidden>
+      No one in the tree yet. Click <strong>+ Add person</strong> to start —
+      add yourself first, then branch out to parents, children and spouses.
+    </p>
+  </main>
+
+  <!-- Person detail / edit panel -->
+  <aside id="detailPanel" class="panel" hidden>
+    <button id="closePanelBtn" class="panel-close" aria-label="Close">×</button>
+    <div id="detailPanelContent"></div>
+  </aside>
+
+  <div id="overlay" class="overlay" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
