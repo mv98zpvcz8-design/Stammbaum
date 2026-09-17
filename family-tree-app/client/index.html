@@ -1,37 +1,138 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Family Tree</title>
+<title>Stammbaum</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>🌳 Family Tree</h1>
-    <div class="topbar-actions">
-      <input id="searchBox" type="search" placeholder="Search people…" />
-      <button id="addPersonBtn" class="btn btn-primary">+ Add person</button>
+
+  <!-- ===== Auth screen ===== -->
+  <div id="authScreen" class="auth-screen" hidden>
+    <div class="auth-card">
+      <div class="auth-logo" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="24" fill="url(#g)"/>
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#7fb894"/>
+              <stop offset="1" stop-color="#4f8f6a"/>
+            </linearGradient>
+          </defs>
+          <path d="M24 12v10M24 22l-7 7M24 22l7 7M17 29v5M31 29v5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="24" cy="10" r="3" fill="#fff"/>
+          <circle cx="17" cy="36" r="3" fill="#fff"/>
+          <circle cx="31" cy="36" r="3" fill="#fff"/>
+        </svg>
+      </div>
+      <h1 class="auth-title">Stammbaum</h1>
+      <p class="auth-subtitle">Euer Familienbaum – privat, nur für die Familie.</p>
+
+      <div class="segmented" id="authTabs">
+        <button type="button" class="segmented-btn is-active" data-tab="login">Anmelden</button>
+        <button type="button" class="segmented-btn" data-tab="register">Registrieren</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <div class="field">
+          <label>Benutzername</label>
+          <input name="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label>Passwort</label>
+          <input type="password" name="password" autocomplete="current-password" required />
+        </div>
+        <p class="auth-error" id="loginError" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block">Anmelden</button>
+      </form>
+
+      <div id="registerPane" class="auth-form" hidden>
+        <div class="segmented segmented-secondary" id="registerModeTabs">
+          <button type="button" class="segmented-btn is-active" data-mode="new">Ich bin neu hier</button>
+          <button type="button" class="segmented-btn" data-mode="claim">Schon im Baum</button>
+        </div>
+
+        <form id="registerNewForm" class="auth-subform">
+          <div class="field-row">
+            <div class="field"><label>Vorname</label><input name="firstName" required /></div>
+            <div class="field"><label>Nachname</label><input name="lastName" /></div>
+          </div>
+          <div class="field"><label>Geburtsdatum</label><input type="date" name="birthDate" /></div>
+          <div class="field"><label>Benutzername</label><input name="username" autocomplete="username" required /></div>
+          <div class="field"><label>Passwort</label><input type="password" name="password" autocomplete="new-password" required minlength="6" /></div>
+          <p class="auth-error" id="registerNewError" hidden></p>
+          <button type="submit" class="btn btn-primary btn-block">Konto erstellen</button>
+        </form>
+
+        <form id="registerClaimForm" class="auth-subform" hidden>
+          <p class="hint">Jemand hat dich vielleicht schon eingetragen. Suche nach deinem Namen:</p>
+          <div class="field"><input id="claimSearch" placeholder="Name suchen…" autocomplete="off" /></div>
+          <div class="picker-list" id="claimResults" hidden></div>
+          <div class="claim-selected" id="claimSelected" hidden>
+            <span id="claimSelectedName"></span>
+            <button type="button" class="link-btn" id="claimClearBtn">ändern</button>
+          </div>
+          <div class="field"><label>Benutzername</label><input id="claimUsername" autocomplete="username" required /></div>
+          <div class="field"><label>Passwort</label><input type="password" id="claimPassword" autocomplete="new-password" required minlength="6" /></div>
+          <p class="auth-error" id="registerClaimError" hidden></p>
+          <button type="submit" class="btn btn-primary btn-block" id="claimSubmitBtn" disabled>Konto erstellen</button>
+        </form>
+      </div>
     </div>
-  </header>
+  </div>
 
-  <main id="treeContainer" class="tree-container">
-    <div id="treeCanvas" class="tree-canvas">
-      <svg id="linesSvg" class="lines-svg"></svg>
-    </div>
-    <p id="emptyState" class="empty-state" hidden>
-      No one in the tree yet. Click <strong>+ Add person</strong> to start —
-      add yourself first, then branch out to parents, children and spouses.
-    </p>
-  </main>
+  <!-- ===== Main app ===== -->
+  <div id="appScreen" hidden>
+    <header class="topbar">
+      <div class="topbar-brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 4v6M12 10l-4.5 4.5M12 10l4.5 4.5M7.5 14.5v3.5M16.5 14.5v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="3" r="2" fill="currentColor"/>
+          <circle cx="7.5" cy="19" r="2" fill="currentColor"/>
+          <circle cx="16.5" cy="19" r="2" fill="currentColor"/>
+        </svg>
+        <h1>Stammbaum</h1>
+      </div>
+      <div class="topbar-actions">
+        <div class="search-field">
+          <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M17 17l-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <input id="searchBox" type="search" placeholder="Person suchen…" />
+        </div>
+        <button id="addPersonBtn" class="btn btn-primary">+ Person</button>
+        <div class="user-menu">
+          <button id="userMenuBtn" class="user-chip" aria-haspopup="true" aria-expanded="false">
+            <span id="userInitial">?</span>
+          </button>
+          <div id="userMenuDropdown" class="user-dropdown" hidden>
+            <div class="user-dropdown-name" id="userDropdownName"></div>
+            <div class="user-dropdown-sub">Angemeldet</div>
+            <button id="logoutBtn" class="user-dropdown-item">Abmelden</button>
+          </div>
+        </div>
+      </div>
+    </header>
 
-  <!-- Person detail / edit panel -->
-  <aside id="detailPanel" class="panel" hidden>
-    <button id="closePanelBtn" class="panel-close" aria-label="Close">×</button>
-    <div id="detailPanelContent"></div>
-  </aside>
+    <main id="treeContainer" class="tree-container">
+      <div id="treeCanvas" class="tree-canvas">
+        <svg id="linesSvg" class="lines-svg"></svg>
+      </div>
+      <p id="emptyState" class="empty-state" hidden>
+        Noch niemand im Baum. Klicke auf <strong>+ Person</strong>, um zu starten.
+      </p>
+    </main>
 
-  <div id="overlay" class="overlay" hidden></div>
+    <!-- Person detail / edit panel -->
+    <aside id="detailPanel" class="panel" hidden>
+      <button id="closePanelBtn" class="panel-close" aria-label="Schließen">×</button>
+      <div id="detailPanelContent"></div>
+    </aside>
+
+    <div id="overlay" class="overlay" hidden></div>
+  </div>
 
   <script src="app.js"></script>
 </body>

@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
+const auth = require('./auth');
+const { familyComponent } = require('./family');
 
 const PORT = process.env.PORT || 4173;
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
@@ -93,7 +95,7 @@ function notFound(res) {
 }
 
 const routes = [];
-function route(method, pattern, handler) {
+function route(method, pattern, handler, opts = {}) {
   // pattern like '/api/people/:id'
   const keys = [];
   const regex = new RegExp(
@@ -104,7 +106,19 @@ function route(method, pattern, handler) {
       }) +
       '$'
   );
-  routes.push({ method, regex, keys, handler });
+  routes.push({ method, regex, keys, handler, public: !!opts.public });
+}
+
+function resolveSession(req) {
+  const cookies = auth.parseCookies(req);
+  const token = cookies[auth.SESSION_COOKIE];
+  if (!token) return { user: null, person: null };
+  const session = db.findSession(token);
+  if (!session) return { user: null, person: null };
+  const user = db.findUserById(session.userId);
+  if (!user) return { user: null, person: null };
+  const person = db.getPeople().find((p) => p.id === user.personId) || null;
+  return { user, person };
 }
 
 async function handleApi(req, res, pathname) {
@@ -114,25 +128,33 @@ async function handleApi(req, res, pathname) {
     if (!m) continue;
     const params = {};
     r.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1])));
+    const { user, person } = resolveSession(req);
+    if (!r.public && !user) {
+      sendJson(res, 401, { error: 'Not logged in' });
+      return true;
+    }
+    req.user = user;
+    req.person = person;
     try {
       await r.handler(req, res, params);
     } catch (err) {
       console.error(err);
-      sendJson(res, 400, { error: err.message || 'Bad request' });
+      sendJson(res, err.status || 400, { error: err.message || 'Bad request' });
     }
     return true;
   }
   return false;
 }
 
-// ---- Routes ----
+function requireOwnFamily(req, personId) {
+  if (personId === req.person.id) return;
+  const component = familyComponent(db.getRelationships(), req.person.id);
+  if (!component.has(personId)) {
+    throw Object.assign(new Error('That person is not in your family'), { status: 403 });
+  }
+}
 
-route('GET', '/api/state', async (req, res) => {
-  sendJson(res, 200, db.getAll());
-});
-
-route('POST', '/api/people', async (req, res) => {
-  const body = await readJsonBody(req);
+function makePerson(body) {
   const person = {
     id: crypto.randomUUID(),
     firstName: (body.firstName || '').trim(),
@@ -149,11 +171,102 @@ route('POST', '/api/people', async (req, res) => {
   if (!person.firstName && !person.lastName) {
     throw new Error('A person needs at least a first or last name');
   }
+  return person;
+}
+
+// ---- Auth routes (public) ----
+
+route('GET', '/api/auth/me', async (req, res) => {
+  sendJson(res, 200, { user: req.user && { id: req.user.id, username: req.user.username }, person: req.person });
+}, { public: true });
+
+route('GET', '/api/auth/search-unclaimed', async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  const q = (url.searchParams.get('q') || '').trim().toLowerCase();
+  if (q.length < 2) return sendJson(res, 200, { people: [] });
+  const claimedIds = new Set(db.getUsers().map((u) => u.personId));
+  const matches = db.getPeople()
+    .filter((p) => !claimedIds.has(p.id))
+    .filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(q))
+    .slice(0, 15)
+    .map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, birthDate: p.birthDate }));
+  sendJson(res, 200, { people: matches });
+}, { public: true });
+
+route('POST', '/api/auth/register', async (req, res) => {
+  const body = await readJsonBody(req);
+  const username = (body.username || '').trim();
+  const password = body.password || '';
+  if (username.length < 3) throw new Error('Username must be at least 3 characters');
+  if (password.length < 6) throw new Error('Password must be at least 6 characters');
+  if (db.findUserByUsername(username)) throw new Error('That username is already taken');
+
+  let person;
+  if (body.mode === 'claim') {
+    person = db.getPeople().find((p) => p.id === body.personId);
+    if (!person) throw new Error('Person not found');
+    if (db.findUserByPersonId(person.id)) throw new Error('That person already has an account');
+  } else {
+    person = makePerson(body.person || {});
+    db.addPerson(person);
+  }
+
+  const user = {
+    id: crypto.randomUUID(),
+    username,
+    passwordHash: auth.hashPassword(password),
+    personId: person.id,
+    createdAt: new Date().toISOString(),
+  };
+  db.addUser(user);
+
+  const token = auth.createToken();
+  db.addSession({ token, userId: user.id, expiresAt: Date.now() + auth.SESSION_TTL_MS });
+  auth.setSessionCookie(res, token);
+  sendJson(res, 201, { user: { id: user.id, username: user.username }, person });
+}, { public: true });
+
+route('POST', '/api/auth/login', async (req, res) => {
+  const body = await readJsonBody(req);
+  const user = db.findUserByUsername(body.username || '');
+  if (!user || !auth.verifyPassword(body.password || '', user.passwordHash)) {
+    throw Object.assign(new Error('Wrong username or password'), { status: 401 });
+  }
+  const token = auth.createToken();
+  db.addSession({ token, userId: user.id, expiresAt: Date.now() + auth.SESSION_TTL_MS });
+  auth.setSessionCookie(res, token);
+  const person = db.getPeople().find((p) => p.id === user.personId) || null;
+  sendJson(res, 200, { user: { id: user.id, username: user.username }, person });
+}, { public: true });
+
+route('POST', '/api/auth/logout', async (req, res) => {
+  const cookies = auth.parseCookies(req);
+  const token = cookies[auth.SESSION_COOKIE];
+  if (token) db.deleteSession(token);
+  auth.clearSessionCookie(res);
+  sendJson(res, 200, { ok: true });
+}, { public: true });
+
+// ---- Family tree routes (require login) ----
+
+route('GET', '/api/state', async (req, res) => {
+  const component = familyComponent(db.getRelationships(), req.person.id);
+  const people = db.getPeople().filter((p) => component.has(p.id));
+  const relationships = db.getRelationships().filter(
+    (r) => component.has(r.fromId) && component.has(r.toId)
+  );
+  sendJson(res, 200, { people, relationships, me: req.person.id });
+});
+
+route('POST', '/api/people', async (req, res) => {
+  const body = await readJsonBody(req);
+  const person = makePerson(body);
   db.addPerson(person);
   sendJson(res, 201, person);
 });
 
 route('PUT', '/api/people/:id', async (req, res, { id }) => {
+  requireOwnFamily(req, id);
   const body = await readJsonBody(req);
   const allowed = ['firstName', 'lastName', 'maidenName', 'gender', 'birthDate', 'deathDate', 'birthPlace', 'notes'];
   const updates = {};
@@ -166,6 +279,7 @@ route('PUT', '/api/people/:id', async (req, res, { id }) => {
 });
 
 route('DELETE', '/api/people/:id', async (req, res, { id }) => {
+  requireOwnFamily(req, id);
   const person = db.getPeople().find((p) => p.id === id);
   if (person) {
     for (const photo of person.photos || []) {
@@ -178,6 +292,7 @@ route('DELETE', '/api/people/:id', async (req, res, { id }) => {
 });
 
 route('POST', '/api/people/:id/photos', async (req, res, { id }) => {
+  requireOwnFamily(req, id);
   const body = await readJsonBody(req);
   const person = db.getPeople().find((p) => p.id === id);
   if (!person) return notFound(res);
@@ -190,6 +305,7 @@ route('POST', '/api/people/:id/photos', async (req, res, { id }) => {
 });
 
 route('DELETE', '/api/people/:personId/photos/:photoId', async (req, res, { personId, photoId }) => {
+  requireOwnFamily(req, personId);
   const person = db.getPeople().find((p) => p.id === personId);
   if (!person) return notFound(res);
   const photo = (person.photos || []).find((ph) => ph.id === photoId);
@@ -210,6 +326,10 @@ route('POST', '/api/relationships', async (req, res) => {
   if (!people.find((p) => p.id === fromId) || !people.find((p) => p.id === toId)) {
     throw new Error('Unknown person in relationship');
   }
+  const component = familyComponent(db.getRelationships(), req.person.id);
+  if (fromId !== req.person.id && toId !== req.person.id && !component.has(fromId) && !component.has(toId)) {
+    throw Object.assign(new Error('At least one side must be in your family'), { status: 403 });
+  }
   const dup = db.getRelationships().find(
     (r) =>
       r.type === type &&
@@ -223,6 +343,10 @@ route('POST', '/api/relationships', async (req, res) => {
 });
 
 route('DELETE', '/api/relationships/:id', async (req, res, { id }) => {
+  const rel = db.getRelationships().find((r) => r.id === id);
+  if (rel) {
+    requireOwnFamily(req, rel.fromId);
+  }
   const ok = db.deleteRelationship(id);
   if (!ok) return notFound(res);
   sendJson(res, 200, { ok: true });
