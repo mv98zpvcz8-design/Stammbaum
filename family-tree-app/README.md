@@ -23,6 +23,21 @@ To use a different port:
 PORT=5000 node index.js
 ```
 
+## Running it without your own computer (Render.com, free)
+
+If you don't have a laptop/PC to keep running, you can host it for free on [Render.com](https://render.com) instead — entirely through your browser, no command line needed:
+
+1. Sign up at render.com (free, no credit card required for this).
+2. **New** → **Web Service** → connect your GitHub account and pick this repository.
+3. Fill in:
+   - **Root Directory**: `family-tree-app`
+   - **Build Command**: leave empty (no dependencies to install)
+   - **Start Command**: `npm start`
+   - **Instance Type**: Free
+4. Click **Create Web Service**. After a minute or two you'll get a public address like `https://yourapp.onrender.com` — that's your family tree, reachable from any phone, tablet or computer, no local network needed.
+
+**Important caveat with the free plan**: its disk is not permanent storage — your data survives normal restarts and the service "sleeping" after inactivity (it just takes ~30 seconds to wake up on the next visit), but is wiped whenever you deploy new code. Treat it as a great way to get started and let the family try it out; once it's part of daily use, back up `server/data/db.json` and `server/uploads/` regularly (Render's dashboard lets you open a shell to download them), or move to a plan/host with a persistent disk.
+
 ## Accounts and perspective
 
 There's no separate admin setup step — the first thing anyone does is register:

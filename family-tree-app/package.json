@@ -1,0 +1,12 @@
+{
+  "name": "family-tree-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private, self-hosted family tree app",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js"
+  }
+}
