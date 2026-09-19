@@ -148,6 +148,21 @@ input:focus, textarea:focus, select:focus {
   font-size: 13px;
   margin: 4px 0 14px;
 }
+.auth-forgot {
+  display: block;
+  margin: 14px auto 0;
+  text-align: center;
+}
+.pending-message {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.pending-message strong { color: var(--ink); }
 
 /* ---------- Segmented control ---------- */
 .segmented {
@@ -217,6 +232,7 @@ input:focus, textarea:focus, select:focus {
 /* ---------- User menu ---------- */
 .user-menu { position: relative; }
 .user-chip {
+  position: relative;
   width: 34px; height: 34px;
   border-radius: 50%;
   border: none;
@@ -246,12 +262,41 @@ input:focus, textarea:focus, select:focus {
 .user-dropdown-name { font-weight: 640; font-size: 14px; padding: 8px 10px 0; }
 .user-dropdown-sub { color: var(--ink-secondary); font-size: 12px; padding: 0 10px 8px; border-bottom: 1px solid var(--hairline); margin-bottom: 6px; }
 .user-dropdown-item {
-  display: block; width: 100%; text-align: left;
+  display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left;
   background: none; border: none; font: inherit; font-size: 14px;
   padding: 8px 10px; border-radius: var(--radius-sm);
-  cursor: pointer; color: var(--danger);
+  cursor: pointer; color: var(--ink);
 }
-.user-dropdown-item:hover { background: var(--danger-tint); }
+.user-dropdown-item:hover { background: var(--surface-secondary); }
+.user-dropdown-item-danger { color: var(--danger); margin-top: 2px; }
+.user-dropdown-item-danger:hover { background: var(--danger-tint); }
+
+.pending-badge {
+  position: absolute;
+  top: -3px; right: -3px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 980px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  border: 2px solid var(--bg);
+}
+.pending-badge-inline {
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 980px;
+}
+
+.admin-row-name { font-weight: 600; font-size: 14px; }
+.admin-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ---------- Tree ---------- */
 .tree-container {

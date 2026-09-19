@@ -2,7 +2,9 @@
 const crypto = require('crypto');
 
 const SESSION_COOKIE = 'ft_session';
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 1 year — stay signed in on this device
+const RESET_CODE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const RESET_CODE_MAX_ATTEMPTS = 5;
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -21,6 +23,11 @@ function verifyPassword(password, stored) {
 
 function createToken() {
   return crypto.randomBytes(32).toString('hex');
+}
+
+// 6-digit code an admin reads out to a family member to let them reset their own password.
+function createResetCode() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 
 function parseCookies(req) {
@@ -52,9 +59,12 @@ function clearSessionCookie(res) {
 module.exports = {
   SESSION_COOKIE,
   SESSION_TTL_MS,
+  RESET_CODE_TTL_MS,
+  RESET_CODE_MAX_ATTEMPTS,
   hashPassword,
   verifyPassword,
   createToken,
+  createResetCode,
   parseCookies,
   setSessionCookie,
   clearSessionCookie,

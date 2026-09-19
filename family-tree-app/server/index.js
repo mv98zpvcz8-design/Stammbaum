@@ -154,6 +154,16 @@ function requireOwnFamily(req, personId) {
   }
 }
 
+function requireAdmin(req) {
+  if (!req.user.isAdmin) {
+    throw Object.assign(new Error('Only a family admin can do that'), { status: 403 });
+  }
+}
+
+function publicUser(user) {
+  return { id: user.id, username: user.username, isAdmin: !!user.isAdmin };
+}
+
 function makePerson(body) {
   const person = {
     id: crypto.randomUUID(),
@@ -177,7 +187,7 @@ function makePerson(body) {
 // ---- Auth routes (public) ----
 
 route('GET', '/api/auth/me', async (req, res) => {
-  sendJson(res, 200, { user: req.user && { id: req.user.id, username: req.user.username }, person: req.person });
+  sendJson(res, 200, { user: req.user && publicUser(req.user), person: req.person });
 }, { public: true });
 
 route('GET', '/api/auth/search-unclaimed', async (req, res) => {
@@ -193,29 +203,44 @@ route('GET', '/api/auth/search-unclaimed', async (req, res) => {
   sendJson(res, 200, { people: matches });
 }, { public: true });
 
+function usernameTaken(username) {
+  return !!db.findUserByUsername(username) || !!db.findJoinRequestByUsername(username);
+}
+
 route('POST', '/api/auth/register', async (req, res) => {
   const body = await readJsonBody(req);
   const username = (body.username || '').trim();
   const password = body.password || '';
   if (username.length < 3) throw new Error('Username must be at least 3 characters');
   if (password.length < 6) throw new Error('Password must be at least 6 characters');
-  if (db.findUserByUsername(username)) throw new Error('That username is already taken');
+  if (usernameTaken(username)) throw new Error('That username is already taken');
 
-  let person;
   if (body.mode === 'claim') {
-    person = db.getPeople().find((p) => p.id === body.personId);
+    const person = db.getPeople().find((p) => p.id === body.personId);
     if (!person) throw new Error('Person not found');
     if (db.findUserByPersonId(person.id)) throw new Error('That person already has an account');
-  } else {
-    person = makePerson(body.person || {});
-    db.addPerson(person);
+
+    const request = {
+      id: crypto.randomUUID(),
+      personId: person.id,
+      username,
+      passwordHash: auth.hashPassword(password),
+      createdAt: new Date().toISOString(),
+    };
+    db.addJoinRequest(request);
+    sendJson(res, 202, { status: 'pending', person: { firstName: person.firstName, lastName: person.lastName } });
+    return;
   }
+
+  const person = makePerson(body.person || {});
+  db.addPerson(person);
 
   const user = {
     id: crypto.randomUUID(),
     username,
     passwordHash: auth.hashPassword(password),
     personId: person.id,
+    isAdmin: true, // first to register for a new family tree administers it
     createdAt: new Date().toISOString(),
   };
   db.addUser(user);
@@ -223,7 +248,7 @@ route('POST', '/api/auth/register', async (req, res) => {
   const token = auth.createToken();
   db.addSession({ token, userId: user.id, expiresAt: Date.now() + auth.SESSION_TTL_MS });
   auth.setSessionCookie(res, token);
-  sendJson(res, 201, { user: { id: user.id, username: user.username }, person });
+  sendJson(res, 201, { user: publicUser(user), person });
 }, { public: true });
 
 route('POST', '/api/auth/login', async (req, res) => {
@@ -236,7 +261,37 @@ route('POST', '/api/auth/login', async (req, res) => {
   db.addSession({ token, userId: user.id, expiresAt: Date.now() + auth.SESSION_TTL_MS });
   auth.setSessionCookie(res, token);
   const person = db.getPeople().find((p) => p.id === user.personId) || null;
-  sendJson(res, 200, { user: { id: user.id, username: user.username }, person });
+  sendJson(res, 200, { user: publicUser(user), person });
+}, { public: true });
+
+route('POST', '/api/auth/reset-password', async (req, res) => {
+  const body = await readJsonBody(req);
+  const user = db.findUserByUsername(body.username || '');
+  const newPassword = body.newPassword || '';
+  if (!user || !user.resetCode) {
+    throw Object.assign(new Error('Wrong username or code'), { status: 401 });
+  }
+  if (user.resetCode.expiresAt < Date.now()) {
+    db.updateUser(user.id, { resetCode: null });
+    throw Object.assign(new Error('That code has expired — ask a family admin for a new one'), { status: 401 });
+  }
+  if ((body.code || '').trim() !== user.resetCode.code) {
+    const attempts = (user.resetCode.attempts || 0) + 1;
+    if (attempts >= auth.RESET_CODE_MAX_ATTEMPTS) {
+      db.updateUser(user.id, { resetCode: null });
+      throw Object.assign(new Error('Too many wrong attempts — ask a family admin for a new code'), { status: 401 });
+    }
+    db.updateUser(user.id, { resetCode: { ...user.resetCode, attempts } });
+    throw Object.assign(new Error('Wrong username or code'), { status: 401 });
+  }
+  if (newPassword.length < 6) throw new Error('Password must be at least 6 characters');
+
+  db.updateUser(user.id, { passwordHash: auth.hashPassword(newPassword), resetCode: null });
+  const token = auth.createToken();
+  db.addSession({ token, userId: user.id, expiresAt: Date.now() + auth.SESSION_TTL_MS });
+  auth.setSessionCookie(res, token);
+  const person = db.getPeople().find((p) => p.id === user.personId) || null;
+  sendJson(res, 200, { user: publicUser(user), person });
 }, { public: true });
 
 route('POST', '/api/auth/logout', async (req, res) => {
@@ -246,6 +301,71 @@ route('POST', '/api/auth/logout', async (req, res) => {
   auth.clearSessionCookie(res);
   sendJson(res, 200, { ok: true });
 }, { public: true });
+
+// ---- Admin routes (require login + isAdmin) ----
+
+route('GET', '/api/admin/family', async (req, res) => {
+  requireAdmin(req);
+  const component = familyComponent(db.getRelationships(), req.person.id);
+  const nameOf = (personId) => {
+    const p = db.getPeople().find((pp) => pp.id === personId);
+    return p ? [p.firstName, p.lastName].filter(Boolean).join(' ') : '(unbekannt)';
+  };
+
+  const pendingRequests = db.getJoinRequests()
+    .filter((r) => component.has(r.personId))
+    .map((r) => ({ id: r.id, username: r.username, personId: r.personId, personName: nameOf(r.personId), createdAt: r.createdAt }));
+
+  const members = db.getUsers()
+    .filter((u) => component.has(u.personId))
+    .map((u) => ({ id: u.id, username: u.username, personId: u.personId, personName: nameOf(u.personId), isAdmin: !!u.isAdmin }));
+
+  sendJson(res, 200, { pendingRequests, members });
+});
+
+route('POST', '/api/admin/join-requests/:id/approve', async (req, res, { id }) => {
+  requireAdmin(req);
+  const request = db.findJoinRequestById(id);
+  if (!request) return notFound(res);
+  requireOwnFamily(req, request.personId);
+  if (db.findUserByPersonId(request.personId)) {
+    db.deleteJoinRequest(id);
+    throw new Error('That person already has an account');
+  }
+  const user = {
+    id: crypto.randomUUID(),
+    username: request.username,
+    passwordHash: request.passwordHash,
+    personId: request.personId,
+    isAdmin: false,
+    createdAt: new Date().toISOString(),
+  };
+  db.addUser(user);
+  db.deleteJoinRequest(id);
+  sendJson(res, 200, { ok: true });
+});
+
+route('POST', '/api/admin/join-requests/:id/deny', async (req, res, { id }) => {
+  requireAdmin(req);
+  const request = db.findJoinRequestById(id);
+  if (!request) return notFound(res);
+  requireOwnFamily(req, request.personId);
+  db.deleteJoinRequest(id);
+  sendJson(res, 200, { ok: true });
+});
+
+route('POST', '/api/admin/reset-password', async (req, res) => {
+  requireAdmin(req);
+  const body = await readJsonBody(req);
+  const target = db.findUserById(body.userId || '');
+  if (!target) return notFound(res);
+  requireOwnFamily(req, target.personId);
+  const code = auth.createResetCode();
+  db.updateUser(target.id, {
+    resetCode: { code, expiresAt: Date.now() + auth.RESET_CODE_TTL_MS, attempts: 0 },
+  });
+  sendJson(res, 200, { code, username: target.username, expiresInMinutes: auth.RESET_CODE_TTL_MS / 60000 });
+});
 
 // ---- Family tree routes (require login) ----
 

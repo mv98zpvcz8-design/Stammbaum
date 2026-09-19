@@ -25,12 +25,21 @@ PORT=5000 node index.js
 
 ## Accounts and perspective
 
-There's no admin setup step — the first thing anyone does is register:
+There's no separate admin setup step — the first thing anyone does is register:
 
-- **"Ich bin neu hier"** ("I'm new here") — create your own person in the tree plus a username/password, in one step.
-- **"Schon im Baum"** ("Already in the tree") — if someone already added you (e.g. a parent added you as their child), search for your name, claim that person, and set a password for it.
+- **"Ich bin neu hier"** ("I'm new here") — create your own person in the tree plus a username/password, in one step. You immediately become the **admin** of that new family tree (see below).
+- **"Schon im Baum"** ("Already in the tree") — if someone already added you (e.g. a parent added you as their child), search for your name and set a password for it. This sends a **join request**, not an instant account — see Approvals below.
 
-After that, logging in shows the tree from that person's point of view: their card is marked **"Du"** ("You"), and by default they see everyone connected to them by any parent/child/spouse link — their whole family, however distant, but not an unrelated family that happens to be stored on the same server. Adding a new relative (parent, spouse, child) automatically brings that person into your view; editing or deleting someone requires them to already be part of your family.
+After logging in, the tree is shown from that person's point of view: their card is marked **"Du"** ("You"), and by default they see everyone connected to them by any parent/child/spouse link — their whole family, however distant, but not an unrelated family that happens to be stored on the same server. Adding a new relative (parent, spouse, child) automatically brings that person into your view; editing or deleting someone requires them to already be part of your family.
+
+### Approvals ("Familie verwalten")
+
+Whoever registers as "Ich bin neu hier" for a family becomes that family's **admin**, marked with a "Verwaltung" tag. Every family can have more than one — anyone who starts a new tree is one for it. Admins get a **"Familie verwalten"** entry in their user menu (with a red badge showing how many requests are waiting) where they can:
+
+- **Approve or deny join requests** — when someone claims a person you already added, they can't log in until an admin approves it. This stops a stranger who happens to know the server's address from grabbing an identity in your tree and seeing private family data.
+- **Reset a family member's password** — since the app has no email, there's no "forgot password" link that emails you a reset. Instead, if someone forgets their password, an admin generates a short numeric code for them (valid 30 minutes) in "Familie verwalten" and relays it however you like (in person, phone, chat). The person then enters it on the **"Passwort vergessen?"** link on the login screen, along with a new password.
+
+Once you register or log in, you stay signed in on that device for a year (no repeated logins).
 
 ## Where your data lives
 

@@ -1,5 +1,5 @@
 (() => {
-  const state = { people: [], relationships: [], search: '', me: null };
+  const state = { people: [], relationships: [], search: '', me: null, isAdmin: false };
 
   const els = {
     authScreen: document.getElementById('authScreen'),
@@ -19,6 +19,9 @@
     userInitial: document.getElementById('userInitial'),
     userDropdownName: document.getElementById('userDropdownName'),
     logoutBtn: document.getElementById('logoutBtn'),
+    manageFamilyBtn: document.getElementById('manageFamilyBtn'),
+    pendingBadge: document.getElementById('pendingBadge'),
+    pendingBadgeInline: document.getElementById('pendingBadgeInline'),
   };
 
   // ---------- API helpers ----------
@@ -53,12 +56,29 @@
     els.appScreen.hidden = true;
   }
 
-  function showAppScreen(person) {
+  function showAppScreen(user, person) {
     els.authScreen.hidden = true;
     els.appScreen.hidden = false;
+    state.isAdmin = !!(user && user.isAdmin);
     if (person) {
       els.userInitial.textContent = (person.firstName || '?')[0].toUpperCase();
       els.userDropdownName.textContent = [person.firstName, person.lastName].filter(Boolean).join(' ');
+    }
+    els.manageFamilyBtn.hidden = !state.isAdmin;
+    if (state.isAdmin) refreshAdminBadge();
+  }
+
+  async function refreshAdminBadge() {
+    if (!state.isAdmin) return;
+    try {
+      const data = await api('/api/admin/family');
+      const count = data.pendingRequests.length;
+      els.pendingBadge.hidden = count === 0;
+      els.pendingBadge.textContent = String(count);
+      els.pendingBadgeInline.hidden = count === 0;
+      els.pendingBadgeInline.textContent = String(count);
+    } catch (err) {
+      // ignore — badge just won't update
     }
   }
 
@@ -66,7 +86,7 @@
     try {
       const data = await fetch('/api/auth/me', { headers: { 'Content-Type': 'application/json' } }).then((r) => r.json());
       if (data.user && data.person) {
-        showAppScreen(data.person);
+        showAppScreen(data.user, data.person);
         await loadState();
       } else {
         showAuthScreen();
@@ -119,10 +139,36 @@
     const fd = new FormData(loginForm);
     try {
       const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(fd)) });
-      showAppScreen(data.person);
+      showAppScreen(data.user, data.person);
       await loadState();
     } catch (err) {
       setError(document.getElementById('loginError'), err.message);
+    }
+  });
+
+  // -- Forgot password / reset --
+  const resetForm = document.getElementById('resetForm');
+  document.getElementById('forgotPasswordLink').addEventListener('click', () => {
+    loginForm.hidden = true;
+    registerPane.hidden = true;
+    resetForm.hidden = false;
+  });
+  document.getElementById('backToLoginLink').addEventListener('click', () => {
+    resetForm.hidden = true;
+    loginForm.hidden = false;
+  });
+  resetForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setError(document.getElementById('resetError'), '');
+    const fd = new FormData(resetForm);
+    try {
+      const data = await api('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(Object.fromEntries(fd)) });
+      resetForm.hidden = true;
+      loginForm.hidden = false;
+      showAppScreen(data.user, data.person);
+      await loadState();
+    } catch (err) {
+      setError(document.getElementById('resetError'), err.message);
     }
   });
 
@@ -144,7 +190,7 @@
     };
     try {
       const data = await api('/api/auth/register', { method: 'POST', body: JSON.stringify(body) });
-      showAppScreen(data.person);
+      showAppScreen(data.user, data.person);
       await loadState();
     } catch (err) {
       setError(document.getElementById('registerNewError'), err.message);
@@ -212,11 +258,23 @@
     };
     try {
       const data = await api('/api/auth/register', { method: 'POST', body: JSON.stringify(body) });
-      showAppScreen(data.person);
-      await loadState();
+      registerClaimForm.hidden = true;
+      document.getElementById('pendingName').textContent = [data.person.firstName, data.person.lastName].filter(Boolean).join(' ');
+      document.getElementById('pendingPane').hidden = false;
     } catch (err) {
       setError(document.getElementById('registerClaimError'), err.message);
     }
+  });
+
+  document.getElementById('pendingBackBtn').addEventListener('click', () => {
+    document.getElementById('pendingPane').hidden = true;
+    registerClaimForm.hidden = false;
+    claimedPersonId = null;
+    claimSelected.hidden = true;
+    claimSubmitBtn.disabled = true;
+    document.getElementById('claimUsername').value = '';
+    document.getElementById('claimPassword').value = '';
+    authTabs.querySelector('[data-tab="login"]').click();
   });
 
   // -- User menu / logout --
@@ -236,9 +294,112 @@
     state.people = [];
     state.relationships = [];
     state.me = null;
+    state.isAdmin = false;
     closePanel();
     showAuthScreen();
   });
+
+  els.manageFamilyBtn.addEventListener('click', () => {
+    els.userMenuDropdown.hidden = true;
+    openAdminPanel();
+  });
+
+  async function openAdminPanel() {
+    els.detailPanelContent.innerHTML = `<h2>Familie verwalten</h2><p class="muted">Lädt…</p>`;
+    openOverlay();
+    try {
+      const data = await api('/api/admin/family');
+      renderAdminPanel(data);
+    } catch (err) {
+      els.detailPanelContent.innerHTML = `<h2>Familie verwalten</h2><p class="auth-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderAdminPanel(data) {
+    const requestsHtml = data.pendingRequests.length
+      ? data.pendingRequests.map((r) => `
+          <li class="rel-list-row" data-request-id="${r.id}">
+            <div>
+              <div class="admin-row-name">${escapeHtml(r.personName)}</div>
+              <div class="muted">möchte sich als <strong>${escapeHtml(r.username)}</strong> anmelden</div>
+            </div>
+            <div class="admin-row-actions">
+              <button class="btn btn-small btn-primary" data-approve="${r.id}">Annehmen</button>
+              <button class="btn btn-small" data-deny="${r.id}">Ablehnen</button>
+            </div>
+          </li>
+        `).join('')
+      : '<li class="muted">Keine offenen Anfragen</li>';
+
+    const membersHtml = data.members.length
+      ? data.members.map((m) => `
+          <li class="rel-list-row" data-user-id="${m.id}">
+            <div>
+              <div class="admin-row-name">${escapeHtml(m.personName)} ${m.isAdmin ? '<span class="me-tag">Verwaltung</span>' : ''}</div>
+              <div class="muted">${escapeHtml(m.username)}</div>
+            </div>
+            <div class="admin-row-actions">
+              <button class="btn btn-small" data-reset="${m.id}">Passwort zurücksetzen</button>
+            </div>
+          </li>
+        `).join('')
+      : '<li class="muted">Keine Mitglieder</li>';
+
+    els.detailPanelContent.innerHTML = `
+      <h2>Familie verwalten</h2>
+      <p class="hint">Neue Mitglieder, die sich als bereits vorhandene Person angemeldet haben, müssen hier bestätigt werden, bevor sie sich einloggen können.</p>
+
+      <div class="section-title">Offene Anfragen</div>
+      <ul class="rel-list" id="adminRequestsList">${requestsHtml}</ul>
+
+      <div class="section-title">Mitglieder</div>
+      <ul class="rel-list" id="adminMembersList">${membersHtml}</ul>
+
+      <div id="resetCodeResult" class="claim-selected" hidden></div>
+
+      <div class="panel-actions">
+        <button class="btn" id="adminCloseBtn">Schließen</button>
+      </div>
+    `;
+
+    document.getElementById('adminCloseBtn').addEventListener('click', closePanel);
+
+    els.detailPanelContent.querySelectorAll('[data-approve]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await api(`/api/admin/join-requests/${btn.dataset.approve}/approve`, { method: 'POST' });
+          await refreshAdminBadge();
+          openAdminPanel();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+    els.detailPanelContent.querySelectorAll('[data-deny]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Diese Anfrage wirklich ablehnen?')) return;
+        try {
+          await api(`/api/admin/join-requests/${btn.dataset.deny}/deny`, { method: 'POST' });
+          await refreshAdminBadge();
+          openAdminPanel();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+    els.detailPanelContent.querySelectorAll('[data-reset]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          const result = await api('/api/admin/reset-password', { method: 'POST', body: JSON.stringify({ userId: btn.dataset.reset }) });
+          const box = document.getElementById('resetCodeResult');
+          box.hidden = false;
+          box.innerHTML = `<span>Code für <strong>${escapeHtml(result.username)}</strong>: <strong style="font-size:18px;letter-spacing:0.1em">${result.code}</strong> (${result.expiresInMinutes} Min. gültig)</span>`;
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+  }
 
   // ---------- Relationship helpers ----------
   function personById(id) {

@@ -5,7 +5,7 @@ const path = require('path');
 const DB_PATH = path.join(__dirname, 'data', 'db.json');
 
 function emptyDb() {
-  return { people: [], relationships: [], users: [], sessions: [] };
+  return { people: [], relationships: [], users: [], sessions: [], joinRequests: [] };
 }
 
 function loadRaw() {
@@ -99,6 +99,36 @@ module.exports = {
     cache.users.push(user);
     persist();
     return user;
+  },
+  updateUser(id, updates) {
+    const idx = cache.users.findIndex((u) => u.id === id);
+    if (idx === -1) return null;
+    cache.users[idx] = { ...cache.users[idx], ...updates, id };
+    persist();
+    return cache.users[idx];
+  },
+
+  // ---- Join requests (claim registrations awaiting admin approval) ----
+  getJoinRequests() {
+    return cache.joinRequests;
+  },
+  findJoinRequestById(id) {
+    return cache.joinRequests.find((r) => r.id === id) || null;
+  },
+  findJoinRequestByUsername(username) {
+    const lower = (username || '').trim().toLowerCase();
+    return cache.joinRequests.find((r) => r.username.toLowerCase() === lower) || null;
+  },
+  addJoinRequest(request) {
+    cache.joinRequests.push(request);
+    persist();
+    return request;
+  },
+  deleteJoinRequest(id) {
+    const before = cache.joinRequests.length;
+    cache.joinRequests = cache.joinRequests.filter((r) => r.id !== id);
+    persist();
+    return cache.joinRequests.length !== before;
   },
 
   // ---- Sessions ----

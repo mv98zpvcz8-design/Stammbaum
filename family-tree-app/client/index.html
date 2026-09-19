@@ -45,6 +45,17 @@
         </div>
         <p class="auth-error" id="loginError" hidden></p>
         <button type="submit" class="btn btn-primary btn-block">Anmelden</button>
+        <button type="button" class="link-btn auth-forgot" id="forgotPasswordLink">Passwort vergessen?</button>
+      </form>
+
+      <form id="resetForm" class="auth-form" hidden>
+        <p class="hint">Ein Familienmitglied mit Verwaltungsrechten kann dir einen Code geben, mit dem du ein neues Passwort setzt.</p>
+        <div class="field"><label>Benutzername</label><input name="username" autocomplete="username" required /></div>
+        <div class="field"><label>Code</label><input name="code" inputmode="numeric" maxlength="6" required /></div>
+        <div class="field"><label>Neues Passwort</label><input type="password" name="newPassword" autocomplete="new-password" required minlength="6" /></div>
+        <p class="auth-error" id="resetError" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block">Passwort setzen</button>
+        <button type="button" class="link-btn auth-forgot" id="backToLoginLink">Zurück zur Anmeldung</button>
       </form>
 
       <div id="registerPane" class="auth-form" hidden>
@@ -78,6 +89,14 @@
           <p class="auth-error" id="registerClaimError" hidden></p>
           <button type="submit" class="btn btn-primary btn-block" id="claimSubmitBtn" disabled>Konto erstellen</button>
         </form>
+
+        <div id="pendingPane" class="auth-subform" hidden>
+          <p class="pending-message">
+            Anfrage gesendet für <strong id="pendingName"></strong>.<br />
+            Ein Familienmitglied mit Verwaltungsrechten muss dich noch bestätigen, bevor du dich anmelden kannst.
+          </p>
+          <button type="button" class="btn btn-block" id="pendingBackBtn">Zurück zur Anmeldung</button>
+        </div>
       </div>
     </div>
   </div>
@@ -106,11 +125,16 @@
         <div class="user-menu">
           <button id="userMenuBtn" class="user-chip" aria-haspopup="true" aria-expanded="false">
             <span id="userInitial">?</span>
+            <span id="pendingBadge" class="pending-badge" hidden></span>
           </button>
           <div id="userMenuDropdown" class="user-dropdown" hidden>
             <div class="user-dropdown-name" id="userDropdownName"></div>
             <div class="user-dropdown-sub">Angemeldet</div>
-            <button id="logoutBtn" class="user-dropdown-item">Abmelden</button>
+            <button id="manageFamilyBtn" class="user-dropdown-item" hidden>
+              Familie verwalten
+              <span id="pendingBadgeInline" class="pending-badge-inline" hidden></span>
+            </button>
+            <button id="logoutBtn" class="user-dropdown-item user-dropdown-item-danger">Abmelden</button>
           </div>
         </div>
       </div>
