@@ -431,11 +431,11 @@
   }
 
   // ---------- Layout ----------
-  const CARD_W = 152;
-  const CARD_H = 96;
-  const COUPLE_GAP = 26;
-  const UNIT_GAP = 46;
-  const ROW_H = 192;
+  const CARD_W = 108;
+  const AVATAR_SIZE = 72;
+  const COUPLE_GAP = 20;
+  const UNIT_GAP = 36;
+  const ROW_H = 170;
 
   function computeLayout() {
     const people = state.people;
@@ -557,7 +557,7 @@
   // ---------- Rendering ----------
   function render() {
     els.emptyState.hidden = state.people.length > 0;
-    els.treeCanvas.querySelectorAll('.person-card').forEach((el) => el.remove());
+    els.treeCanvas.querySelectorAll('.person-node').forEach((el) => el.remove());
 
     if (!state.people.length) {
       els.linesSvg.setAttribute('width', 0);
@@ -577,17 +577,18 @@
     state.people.forEach((p) => {
       const pos = positions[p.id];
       if (!pos) return;
-      const card = document.createElement('div');
+      const node = document.createElement('div');
       const deceased = !!p.deathDate;
       const isMe = p.id === state.me;
-      card.className = `person-card gender-${p.gender || 'other'}${deceased ? ' deceased' : ''}${isMe ? ' is-me' : ''}`;
-      card.style.left = pos.x + 'px';
-      card.style.top = pos.y + 'px';
-      card.style.width = CARD_W + 'px';
-      card.dataset.personId = p.id;
+      node.className = 'person-node';
+      node.style.left = pos.x + 'px';
+      node.style.top = pos.y + 'px';
+      node.style.width = CARD_W + 'px';
+      node.dataset.personId = p.id;
 
       const matches = query && fullName(p).toLowerCase().includes(query);
-      if (matches) card.classList.add('is-match');
+      const avatarClasses = ['person-avatar', deceased && 'deceased', isMe && 'is-me', matches && 'is-match']
+        .filter(Boolean).join(' ');
 
       const photo = p.photos && p.photos[0];
       const photoHtml = photo
@@ -596,14 +597,18 @@
 
       const dates = [formatYear(p.birthDate), formatYear(p.deathDate)].filter(Boolean).join(' – ');
 
-      card.innerHTML = `
-        ${isMe ? '<span class="me-badge">Du</span>' : ''}
-        ${photoHtml}
-        <div class="person-name">${escapeHtml(fullName(p))}</div>
-        ${dates ? `<div class="person-dates">${dates}</div>` : ''}
+      node.innerHTML = `
+        <div class="${avatarClasses}">
+          ${isMe ? '<span class="me-badge">Du</span>' : ''}
+          ${photoHtml}
+        </div>
+        <div class="person-label">
+          <div class="person-name">${escapeHtml(fullName(p))}</div>
+          ${dates ? `<div class="person-dates">${dates}</div>` : ''}
+        </div>
       `;
-      card.addEventListener('click', () => openDetailPanel(p.id));
-      els.treeCanvas.appendChild(card);
+      node.addEventListener('click', () => openDetailPanel(p.id));
+      els.treeCanvas.appendChild(node);
     });
 
     state.relationships.forEach((r) => {
@@ -611,7 +616,11 @@
       const b = positions[r.toId];
       if (!a || !b) return;
       if (r.type === 'spouse') {
-        drawLine(a.x + CARD_W, a.y + CARD_H / 2, b.x, b.y + CARD_H / 2, 'spouse');
+        drawLine(
+          a.x + (CARD_W + AVATAR_SIZE) / 2, a.y + AVATAR_SIZE / 2,
+          b.x + (CARD_W - AVATAR_SIZE) / 2, b.y + AVATAR_SIZE / 2,
+          'spouse'
+        );
       }
     });
 
@@ -627,11 +636,11 @@
       const validParents = parentIds.map((id) => positions[id]).filter(Boolean);
       if (!validParents.length) return;
       const parentXs = validParents.map((pp) => pp.x + CARD_W / 2);
-      const parentY = validParents[0].y + CARD_H;
+      const parentY = validParents[0].y + AVATAR_SIZE;
       const midX = parentXs.reduce((a, b) => a + b, 0) / parentXs.length;
       const midY = parentY + (childPos.y - parentY) / 2;
       validParents.forEach((pp) => {
-        drawLine(pp.x + CARD_W / 2, pp.y + CARD_H, pp.x + CARD_W / 2, midY, 'parent');
+        drawLine(pp.x + CARD_W / 2, pp.y + AVATAR_SIZE, pp.x + CARD_W / 2, midY, 'parent');
       });
       drawLine(Math.min(...parentXs), midY, Math.max(...parentXs), midY, 'parent');
       drawLine(midX, midY, childPos.x + CARD_W / 2, midY, 'parent');
