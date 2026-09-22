@@ -639,15 +639,21 @@
     });
   }
 
+  const rootStyle = getComputedStyle(document.documentElement);
+  function cssVar(name) {
+    return rootStyle.getPropertyValue(name).trim();
+  }
+
   function drawLine(x1, y1, x2, y2, kind) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('x1', x1);
     line.setAttribute('y1', y1);
     line.setAttribute('x2', x2);
     line.setAttribute('y2', y2);
-    line.setAttribute('stroke', kind === 'spouse' ? '#c9a877' : '#b7b0a3');
+    line.setAttribute('stroke', kind === 'spouse' ? cssVar('--gold') : cssVar('--ink-tertiary'));
     line.setAttribute('stroke-width', kind === 'spouse' ? 2.5 : 1.75);
     line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('stroke-opacity', kind === 'spouse' ? '0.9' : '0.55');
     if (kind === 'spouse') line.setAttribute('stroke-dasharray', '1,5');
     els.linesSvg.appendChild(line);
   }
